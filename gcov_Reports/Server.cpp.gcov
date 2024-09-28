@@ -1,0 +1,21 @@
+        -:    0:Source:Server_DIR/Server.cpp
+        -:    1:#include "MSTServer.cpp"
+        -:    2:#include "Patterns.cpp"
+        -:    3:
+        -:    4:/**
+        -:    5: * Entry point for the server application.
+        -:    6: * 
+        -:    7: * This function creates and runs an instance of the MSTServer,
+        -:    8: * which handles incoming connections and processes graph-related
+        -:    9: * requests using a Leader-Follower thread pool.
+        -:   10: * 
+        -:   11: * @return int Exit status of the program.
+        -:   12: */
+        -:   13:
+    #####:   14:int main()
+        -:   15:{
+        -:   16:     // Create server with a specified number of threads in the Leader-Follower pool
+    #####:   17:    MSTServer server(5); 
+    #####:   18:    server.run(); // Start the server to begin listening for and processing client requests
+    #####:   19:    return 0;
+    #####:   20:}

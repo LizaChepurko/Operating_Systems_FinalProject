@@ -1,0 +1,140 @@
+        -:    0:Source:Graph_DIR/Graph_Interface.cpp
+        -:    1:#include <sstream>
+        -:    2:
+        -:    3:#include "Graph_Builder.cpp"
+        -:    4:#include "MST.cpp"
+        -:    5:#include "MSTAlgorithm.cpp"
+        -:    6:#include "MSTFactory.cpp"
+        -:    7:
+        -:    8:/**
+        -:    9: * Main function to interactively manage graphs and solve MST problems for them.
+        -:   10: * Strategy design pattern.
+        -:   11: * 
+        -:   12: * This function continuously reads commands from standard input for managing graphs,
+        -:   13: * like adding/removing edges or graphs, and solving the MST using specified algorithms.
+        -:   14: * Communicates with server process.
+        -:   15: * 
+        -:   16: * @return int The exit status of the program.
+        -:   17: */
+        -:   18:
+    #####:   19:int main()
+        -:   20:{
+    #####:   21:    std::unordered_map<int, Graph> graphs;
+    #####:   22:    std::string line;
+    #####:   23:    while (std::getline(std::cin, line)) 
+        -:   24:    {
+    #####:   25:        std::istringstream iss(line);
+    #####:   26:        std::string cmd;
+    #####:   27:        iss >> cmd; //Extract command from the line
+        -:   28:
+    #####:   29:        if (cmd == "ADD_GRAPH")
+        -:   30:        {
+        -:   31:            int graphId, numVertices;
+    #####:   32:            iss >> graphId >> numVertices;
+    #####:   33:            Graph graph(numVertices);
+        -:   34:            int from, to, weight;
+    #####:   35:            while (iss >> from >> to >> weight)
+        -:   36:            {
+    #####:   37:                graph.addEdge(from, to, weight);
+        -:   38:            }
+    #####:   39:            graphs[graphId] = graph;
+    #####:   40:            std::cout << "Graph added successfully" << std::endl
+    #####:   41:                      << std::endl;
+    #####:   42:        }
+    #####:   43:        else if (cmd == "ADD_EDGE")
+        -:   44:        {
+        -:   45:            int graphId, from, to, weight;
+    #####:   46:            iss >> graphId >> from >> to >> weight;
+        -:   47:
+    #####:   48:            if (graphs.find(graphId) == graphs.end())
+        -:   49:            {
+    #####:   50:                std::cout << "Error: Graph not found" << std::endl
+    #####:   51:                          << std::endl;
+    #####:   52:                continue;
+        -:   53:            }
+        -:   54:
+    #####:   55:            graphs[graphId].addEdge(from, to, weight);
+    #####:   56:            std::cout << "Edge added successfully" << std::endl
+    #####:   57:                      << std::endl;
+        -:   58:        }
+    #####:   59:        else if (cmd == "REMOVE_EDGE")
+        -:   60:        {
+        -:   61:            int graphId, from, to, weight;
+    #####:   62:            iss >> graphId >> from >> to >> weight;
+        -:   63:
+    #####:   64:            if (graphs.find(graphId) == graphs.end())
+        -:   65:            {
+    #####:   66:                std::cout << "Error: Graph not found" << std::endl
+    #####:   67:                          << std::endl;
+    #####:   68:                continue;
+        -:   69:            }
+        -:   70:
+    #####:   71:            graphs[graphId].removeEdge(from, to, weight);
+    #####:   72:            std::cout << "Edge removed successfully" << std::endl
+    #####:   73:                      << std::endl;
+        -:   74:        }
+    #####:   75:        else if (cmd == "REMOVE_GRAPH")
+        -:   76:        {
+        -:   77:            int graphId;
+    #####:   78:            iss >> graphId;
+        -:   79:
+    #####:   80:            if (graphs.find(graphId) == graphs.end())
+        -:   81:            {
+    #####:   82:                std::cout << "Error: Graph not found" << std::endl
+    #####:   83:                          << std::endl;
+    #####:   84:                continue;
+        -:   85:            }
+        -:   86:            // Remove the graph by clearing it. The graph object remains to avoid 
+        -:   87:            // invalid graph IDs in the future.
+    #####:   88:            graphs[graphId].clearGraph();
+    #####:   89:            std::cout << "Graph removed successfully" << std::endl
+    #####:   90:                      << std::endl;
+        -:   91:        }
+    #####:   92:        else if (cmd == "SOLVE_MST")
+        -:   93:        {
+        -:   94:            int graphId;
+    #####:   95:            std::string algoName;
+    #####:   96:            iss >> graphId >> algoName;
+        -:   97:
+    #####:   98:            if (graphs.find(graphId) == graphs.end())
+        -:   99:            {
+    #####:  100:                std::cout << "Error: Graph not found" << std::endl
+    #####:  101:                          << std::endl;
+    #####:  102:                continue;
+        -:  103:            }
+        -:  104:            // Determine which algorithm to use based on user input
+        -:  105:            MSTFactory::Algorithm algo;
+    #####:  106:            if (algoName == "PRIM")
+    #####:  107:                algo = MSTFactory::Algorithm::PRIM;
+    #####:  108:            else if (algoName == "KRUSKAL")
+    #####:  109:                algo = MSTFactory::Algorithm::KRUSKAL;
+    #####:  110:            else if (algoName == "BORUVKA")
+    #####:  111:                algo = MSTFactory::Algorithm::BORUVKA;
+    #####:  112:            else if (algoName == "TARJAN")
+    #####:  113:                algo = MSTFactory::Algorithm::TARJAN;
+        -:  114:            else
+        -:  115:            {
+    #####:  116:                std::cout << "Error: Unknown algorithm" << std::endl
+    #####:  117:                          << std::endl;
+    #####:  118:                continue;
+        -:  119:            }
+        -:  120:            // Solve the MST for the selected graph and algorithm
+    #####:  121:            auto mstAlgorithm = MSTFactory::createAlgorithm(algo);
+    #####:  122:            auto mst = mstAlgorithm->findMST(graphs[graphId]);
+        -:  123:            // Output the results of the MST
+    #####:  124:            int totalWeight = mst->getTotalWeight();
+    #####:  125:            int longestDistance = mst->getLongestDistance();
+    #####:  126:            double avgDistance = mst->getAverageDistance();
+    #####:  127:            int shortestDistance = mst->getShortestEdge();
+        -:  128:
+    #####:  129:            std::cout << "Graph " << graphId << " MST Results:" << std::endl
+    #####:  130:                      << "Total Weight: " << totalWeight << std::endl
+    #####:  131:                      << "Longest Distance of MST: " << longestDistance << std::endl
+    #####:  132:                      << "Average Distance between two vertices of the graph: " << avgDistance << std::endl
+    #####:  133:                      << "Shortest Distance of MST: " << shortestDistance << "\n\n"
+    #####:  134:                      << std::endl;
+    #####:  135:        }
+    #####:  136:        fflush(stdin);
+    #####:  137:    }
+    #####:  138:    return 0;
+    #####:  139:}

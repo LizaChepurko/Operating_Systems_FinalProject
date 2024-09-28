@@ -1,0 +1,329 @@
+        -:    0:Source:Graph_DIR/MSTAlgorithm.cpp
+        -:    1:#include <queue>
+        -:    2:#include <memory>
+        -:    3:#include <unordered_map>
+        -:    4:#include <unordered_set>
+        -:    5:#include <functional>
+        -:    6:
+        -:    7:#include "Graph_Builder.cpp"
+        -:    8:#include "MST.cpp"
+        -:    9:
+        -:   10:#ifndef MSTAlgorithm_CPP
+        -:   11:#define MSTAlgorithm_CPP
+        -:   12:
+        -:   13:/**
+        -:   14: * @brief Abstract class for MST Algorithm implementations.
+        -:   15: *        Defines the interface to find MST.
+        -:   16: */
+        -:   17:
+        -:   18:class MSTAlgorithm
+        -:   19:{
+        -:   20:public:
+        -:   21:    /**
+        -:   22:     * Pure virtual function to find the MST of the provided graph.
+        -:   23:     * @param graph Reference to the graph object.
+        -:   24:     * @return A unique pointer to an MST object representing the minimum spanning tree.
+        -:   25:     */
+        -:   26:    virtual std::unique_ptr<MST> findMST(const Graph &graph) = 0;
+    #####:   27:    virtual ~MSTAlgorithm() = default;
+------------------
+_ZN12MSTAlgorithmD0Ev:
+    #####:   27:    virtual ~MSTAlgorithm() = default;
+------------------
+_ZN12MSTAlgorithmD2Ev:
+    #####:   27:    virtual ~MSTAlgorithm() = default;
+------------------
+        -:   28:};
+        -:   29:
+        -:   30:// Disjoint Set data structure to support union-find operations
+        -:   31:// commonly used in Kruskal's and Borůvka's algorithms.
+        -:   32:class DisjointSet
+        -:   33:{
+        -:   34:private:
+        -:   35:    std::vector<int> parent, rank;
+        -:   36:
+        -:   37:public:
+        -:   38:    /**
+        -:   39:     * Initializes a Disjoint Set with a specified number of elements.
+        -:   40:     * @param n Number of elements.
+        -:   41:     */
+    #####:   42:    DisjointSet(int n) : parent(n), rank(n, 0)
+        -:   43:    {
+    #####:   44:        for (int i = 0; i < n; i++)
+    #####:   45:            parent[i] = i;
+    #####:   46:    }
+        -:   47:    /**
+        -:   48:     * Finds the set representative of the given element.
+        -:   49:     * @param x Element to find the set representative.
+        -:   50:     * @return The root representative of the set containing x.
+        -:   51:     */
+    #####:   52:    int find(int x)
+        -:   53:    {
+    #####:   54:        if (parent[x] != x)
+    #####:   55:            parent[x] = find(parent[x]);
+    #####:   56:        return parent[x];
+        -:   57:    }
+        -:   58:    /**
+        -:   59:     * Unites two sets containing elements x and y.
+        -:   60:     * @param x First element.
+        -:   61:     * @param y Second element.
+        -:   62:     */
+    #####:   63:    void unite(int x, int y)
+        -:   64:    {
+    #####:   65:        int xroot = find(x), yroot = find(y);
+    #####:   66:        if (xroot == yroot)
+    #####:   67:            return;
+    #####:   68:        if (rank[xroot] < rank[yroot])
+    #####:   69:            parent[xroot] = yroot;
+    #####:   70:        else if (rank[xroot] > rank[yroot])
+    #####:   71:            parent[yroot] = xroot;
+        -:   72:        else
+        -:   73:        {
+    #####:   74:            parent[yroot] = xroot;
+    #####:   75:            rank[xroot]++;
+        -:   76:        }
+        -:   77:    }
+        -:   78:};
+        -:   79:
+        -:   80:/**
+        -:   81: * Borůvka's Algorithm for finding the MST of a graph.
+        -:   82: */
+        -:   83:class BoruvkaAlgorithm : public MSTAlgorithm
+        -:   84:{
+        -:   85:public:
+        -:   86:    /**
+        -:   87:     * Finds the MST using Borůvka's algorithm.
+        -:   88:     * @param graph Reference to the graph object.
+        -:   89:     * @return A unique pointer to an MST object representing the minimum spanning tree.
+        -:   90:     */
+    #####:   91:    std::unique_ptr<MST> findMST(const Graph &graph) override
+        -:   92:    {
+    #####:   93:        auto mst = std::make_unique<MST>(graph);
+    #####:   94:        int V = graph.getVerticesCount();
+    #####:   95:        DisjointSet ds(V);
+        -:   96:
+        -:   97:        // Store the cheapest edge for each component
+    #####:   98:        std::vector<Graph::Edge> cheapest(V, {-1, -1, std::numeric_limits<int>::max()});
+        -:   99:
+    #####:  100:        int numComponents = V;
+        -:  101:
+    #####:  102:        while (numComponents > 1)
+        -:  103:        {
+        -:  104:            // Find the cheapest edge for each component
+    #####:  105:            for (int i = 0; i < V; ++i)
+        -:  106:            {
+    #####:  107:                for (const auto &edge : graph.getAdjacencyList()[i])
+        -:  108:                {
+    #####:  109:                    int set1 = ds.find(edge.from);
+    #####:  110:                    int set2 = ds.find(edge.to);
+        -:  111:
+    #####:  112:                    if (set1 != set2)
+        -:  113:                    {
+    #####:  114:                        if (edge.weight < cheapest[set1].weight)
+        -:  115:                        {
+    #####:  116:                            cheapest[set1] = edge;
+        -:  117:                        }
+    #####:  118:                        if (edge.weight < cheapest[set2].weight)
+        -:  119:                        {
+    #####:  120:                            cheapest[set2] = edge;
+        -:  121:                        }
+        -:  122:                    }
+        -:  123:                }
+        -:  124:            }
+        -:  125:
+        -:  126:            // Add the cheapest edges to the MST
+    #####:  127:            for (int i = 0; i < V; ++i)
+        -:  128:            {
+    #####:  129:                if (cheapest[i].from != -1)
+        -:  130:                {
+    #####:  131:                    int set1 = ds.find(cheapest[i].from);
+    #####:  132:                    int set2 = ds.find(cheapest[i].to);
+        -:  133:
+    #####:  134:                    if (set1 != set2)
+        -:  135:                    {
+    #####:  136:                        mst->addEdge(cheapest[i].from, cheapest[i].to, cheapest[i].weight);
+    #####:  137:                        ds.unite(set1, set2);
+    #####:  138:                        numComponents--;
+        -:  139:                    }
+        -:  140:                }
+        -:  141:            }
+        -:  142:
+        -:  143:            // Reset cheapest edges for next iteration
+    #####:  144:            std::fill(cheapest.begin(), cheapest.end(), Graph::Edge(-1, -1, std::numeric_limits<int>::max()));
+        -:  145:        }
+        -:  146:
+    #####:  147:        return mst;
+    #####:  148:    }
+        -:  149:};
+        -:  150:
+        -:  151:/**
+        -:  152: *  Prim's Algorithm for finding the MST of a graph.
+        -:  153: */
+        -:  154:class PrimAlgorithm : public MSTAlgorithm
+        -:  155:{
+        -:  156:public:
+        -:  157:    /**
+        -:  158:     * Finds the MST using Prim's algorithm.
+        -:  159:     * @param graph Reference to the graph object.
+        -:  160:     * @return A unique pointer to an MST object representing the minimum spanning tree.
+        -:  161:     */
+    #####:  162:    std::unique_ptr<MST> findMST(const Graph &graph) override
+        -:  163:    {
+    #####:  164:        auto mst = std::make_unique<MST>(graph);
+    #####:  165:        int V = graph.getVerticesCount();
+    #####:  166:        std::vector<int> key(V, std::numeric_limits<int>::max());
+    #####:  167:        std::vector<bool> inMST(V, false);
+    #####:  168:        std::vector<int> parent(V, -1);
+        -:  169:
+    #####:  170:        std::priority_queue<std::pair<int, int>, std::vector<std::pair<int, int>>, std::greater<std::pair<int, int>>> pq;
+        -:  171:
+    #####:  172:        key[0] = 0;
+    #####:  173:        pq.push({0, 0});
+        -:  174:
+    #####:  175:        while (!pq.empty())
+        -:  176:        {
+    #####:  177:            int u = pq.top().second;
+    #####:  178:            pq.pop();
+        -:  179:
+    #####:  180:            if (inMST[u])
+    #####:  181:                continue;
+        -:  182:
+    #####:  183:            inMST[u] = true;
+        -:  184:
+    #####:  185:            for (const auto &edge : graph.getAdjacencyList()[u])
+        -:  186:            {
+    #####:  187:                int v = edge.to;
+    #####:  188:                int weight = edge.weight;
+        -:  189:
+    #####:  190:                if (!inMST[v] && key[v] > weight)
+        -:  191:                {
+    #####:  192:                    key[v] = weight;
+    #####:  193:                    pq.push({key[v], v});
+    #####:  194:                    parent[v] = u;
+        -:  195:                }
+        -:  196:            }
+        -:  197:        }
+        -:  198:
+    #####:  199:        for (int i = 1; i < V; ++i)
+        -:  200:        {
+    #####:  201:            mst->addEdge(parent[i], i, key[i]);
+        -:  202:        }
+        -:  203:
+    #####:  204:        return mst;
+    #####:  205:    }
+        -:  206:};
+        -:  207:
+        -:  208:/**
+        -:  209: * Kruskal's Algorithm for finding the MST of a graph.
+        -:  210: */
+        -:  211:class KruskalAlgorithm : public MSTAlgorithm
+        -:  212:{
+        -:  213:public:
+        -:  214:    /**
+        -:  215:     * Finds the MST using Kruskal's algorithm.
+        -:  216:     * @param graph Reference to the graph object.
+        -:  217:     * @return A unique pointer to an MST object representing the minimum spanning tree.
+        -:  218:     */
+    #####:  219:    std::unique_ptr<MST> findMST(const Graph &graph) override
+        -:  220:    {
+    #####:  221:        auto mst = std::make_unique<MST>(graph);
+    #####:  222:        int V = graph.getVerticesCount();
+    #####:  223:        std::vector<Graph::Edge> edges;
+        -:  224:
+    #####:  225:        for (int i = 0; i < V; ++i)
+        -:  226:        {
+    #####:  227:            for (const auto &edge : graph.getAdjacencyList()[i])
+        -:  228:            {
+    #####:  229:                if (edge.from < edge.to)
+        -:  230:                { // To avoid duplicates in undirected graph
+    #####:  231:                    edges.push_back(edge);
+        -:  232:                }
+        -:  233:            }
+        -:  234:        }
+        -:  235:
+    #####:  236:        std::sort(edges.begin(), edges.end(), [](const Graph::Edge &a, const Graph::Edge &b)
+    #####:  237:                  { return a.weight < b.weight; });
+        -:  238:
+    #####:  239:        DisjointSet ds(V);
+        -:  240:
+    #####:  241:        for (const auto &edge : edges)
+        -:  242:        {
+    #####:  243:            int set1 = ds.find(edge.from);
+    #####:  244:            int set2 = ds.find(edge.to);
+        -:  245:
+    #####:  246:            if (set1 != set2)
+        -:  247:            {
+    #####:  248:                mst->addEdge(edge.from, edge.to, edge.weight);
+    #####:  249:                ds.unite(set1, set2);
+        -:  250:            }
+        -:  251:        }
+        -:  252:
+    #####:  253:        return mst;
+    #####:  254:    }
+        -:  255:};
+        -:  256:
+        -:  257:/**
+        -:  258: * A modified version of Tarjan's Algorithm for finding the MST of a graph.
+        -:  259: */
+        -:  260:class TarjanAlgorithm : public MSTAlgorithm
+        -:  261:{
+        -:  262:public:
+        -:  263:    /**
+        -:  264:     * Finds the MST using a variant of Tarjan's algorithm.
+        -:  265:     * @param graph Reference to the graph object.
+        -:  266:     * @return A unique pointer to an MST object representing the minimum spanning tree.
+        -:  267:     */
+    #####:  268:    std::unique_ptr<MST> findMST(const Graph &graph) override
+        -:  269:    {
+    #####:  270:        int V = graph.getVerticesCount();
+    #####:  271:        std::vector<Graph::Edge> edges = gatherEdges(graph);
+        -:  272:
+        -:  273:        // Sort all edges in ascending order
+    #####:  274:        std::sort(edges.begin(), edges.end(), [](const Graph::Edge &a, const Graph::Edge &b)
+    #####:  275:                  { return a.weight < b.weight; });
+        -:  276:
+    #####:  277:        DisjointSet ds(V);
+    #####:  278:        auto mst = std::make_unique<MST>(graph);
+        -:  279:
+    #####:  280:        for (const auto &edge : edges)
+        -:  281:        {
+    #####:  282:            int u = ds.find(edge.from);
+    #####:  283:            int v = ds.find(edge.to);
+        -:  284:
+    #####:  285:            if (u != v)
+        -:  286:            {
+    #####:  287:                mst->addEdge(edge.from, edge.to, edge.weight); // Use original edge vertices
+    #####:  288:                ds.unite(u, v);
+        -:  289:            }
+        -:  290:        }
+        -:  291:
+    #####:  292:        return mst;
+    #####:  293:    }
+        -:  294:
+        -:  295:private:
+        -:  296:    /**
+        -:  297:     * Gathers all edges from the graph for processing.
+        -:  298:     * @param graph Reference to the graph object.
+        -:  299:     * @return A vector containing all edges of the graph.
+        -:  300:     */
+    #####:  301:    std::vector<Graph::Edge> gatherEdges(const Graph &graph)
+        -:  302:    {
+    #####:  303:        std::vector<Graph::Edge> edges;
+    #####:  304:        const auto &adj = graph.getAdjacencyList();
+        -:  305:
+    #####:  306:        for (size_t i = 0; i < adj.size(); ++i)
+        -:  307:        {
+    #####:  308:            for (const auto &edge : adj[i])
+        -:  309:            {
+    #####:  310:                if (edge.from < edge.to)
+        -:  311:                {
+    #####:  312:                    edges.push_back(edge);
+        -:  313:                }
+        -:  314:            }
+        -:  315:        }
+        -:  316:
+    #####:  317:        return edges;
+    =====:  318:    }
+        -:  319:};
+        -:  320:
+        -:  321:#endif

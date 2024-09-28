@@ -1,0 +1,146 @@
+        -:    0:Source:Server_DIR/Patterns.cpp
+        -:    1:#include <iostream>
+        -:    2:#include <vector>
+        -:    3:#include <queue>
+        -:    4:#include <functional>
+        -:    5:#include <mutex>
+        -:    6:#include <condition_variable>
+        -:    7:#include <thread>
+        -:    8:#include <atomic>
+        -:    9:
+        -:   10:#ifndef Pattern_CPP
+        -:   11:#define Pattern_CPP
+        -:   12:
+        -:   13:/**
+        -:   14: * Active Object for Pipeline Pattern
+        -:   15: * class consists of a task queue, a worker thread, and synchronization primitives to manage task execution.
+        -:   16: * contains its own thread of control and a queue of pending tasks.
+        -:   17: * provides a solid foundation for asynchronously processing tasks in a way
+        -:   18: * that ensures thread safety and efficient resource handling.
+        -:   19: * */
+        -:   20:class ActiveObject
+        -:   21:{
+        -:   22:private:
+        -:   23:    std::queue<std::function<void()>> tasks;
+        -:   24:    std::mutex mutex;
+        -:   25:    std::condition_variable condition; // Notifies that the shared resource is free to access, Used for make a thread sleep until some condition becomes true.
+        -:   26:    std::atomic<bool> running{true}; // Ensuring thread safety.
+        -:   27:    std::thread worker;              // Represents a single thread of execution.
+        -:   28:
+        -:   29:    // This is the function run by the worker thread.
+        -:   30:    // It waits for tasks to be added to the queue and processes them one by one.
+    #####:   31:    void workerFunction()
+        -:   32:    {
+    #####:   33:        while (running)
+        -:   34:        {
+    #####:   35:            std::function<void()> task;
+        -:   36:            {
+        -:   37:                // Ensuring that only one thread can access shared resources at a time
+    #####:   38:                std::unique_lock<std::mutex> lock(mutex); 
+        -:   39:                // Instructs the thread to wait until either a task is available in the tasks queue 
+        -:   40:                // or the running variable becomes false.
+    #####:   41:                condition.wait(lock, [this]
+    #####:   42:                               { return !tasks.empty() || !running; });
+    #####:   43:                if (!running && tasks.empty())
+    #####:   44:                    return;
+    #####:   45:                task = std::move(tasks.front()); // Fetch the task
+    #####:   46:                tasks.pop();
+    #####:   47:            }
+    #####:   48:            task(); // This line executes the task that was previously fetched from the queue.
+    #####:   49:        }
+        -:   50:    }
+        -:   51:
+        -:   52:public:
+    #####:   53:    ActiveObject() : worker(&ActiveObject::workerFunction, this) {}
+        -:   54:    // stops the worker thread and waits for it to join,
+        -:   55:    // ensuring that all tasks are completed before the object is destroyed.
+    #####:   56:    ~ActiveObject()
+        -:   57:    {
+        -:   58:        {
+    #####:   59:            std::lock_guard<std::mutex> lock(mutex);
+    #####:   60:            running = false;
+    #####:   61:        }
+    #####:   62:        condition.notify_one();
+    #####:   63:        worker.join();
+    #####:   64:    }
+        -:   65:    /**
+        -:   66:     * Adds a new task to the queue. Notifies the worker thread that a new task is available.
+        -:   67:     */
+        -:   68:    template <class F>
+    #####:   69:    void enqueue(F &&f)
+        -:   70:    {
+        -:   71:        {
+    #####:   72:            std::lock_guard<std::mutex> lock(mutex);
+    #####:   73:            tasks.emplace(std::forward<F>(f));
+    #####:   74:        }
+    #####:   75:        condition.notify_one();
+    #####:   76:    }
+        -:   77:};
+        -:   78:
+        -:   79:/**
+        -:   80: * Leader-Follower Thread Pool
+        -:   81: * An implementation of the Leader-Follower pattern using a thread pool.
+        -:   82: * The Leader-Follower pattern decouples task submission from task execution using a fixed number of worker threads in a pool.
+        -:   83: * Threads take turns to become the "leader", which picks tasks, while others wait, improving CPU utilization and load balancing.
+        -:   84: */
+        -:   85:class LeaderFollowerPool
+        -:   86:{
+        -:   87:private:
+        -:   88:    std::vector<std::thread> threads; // Stores the worker threads.
+        -:   89:    std::queue<std::function<void()>> tasks;
+        -:   90:    std::mutex mutex; // Mutex for protecting access to the task queue
+        -:   91:    std::condition_variable condition; // Notifies that the shared resource is free to access, Used for make a thread sleep until some condition becomes true.
+        -:   92:    bool stop;
+        -:   93:
+        -:   94:public:
+        -:   95:    // initializes and starts the worker threads
+    #####:   96:    LeaderFollowerPool(size_t numThreads) : stop(false)
+        -:   97:    {// This for loop will iterate numThreads times. Each iteration creates a new thread in the thread pool.
+    #####:   98:        for (size_t i = 0; i < numThreads; ++i)
+        -:   99:        {//Adds a new thread to a vector which stores all the worker threads in the pool.
+    #####:  100:            threads.emplace_back([this] 
+        -:  101:                                 {
+        -:  102:                while (true) {
+    #####:  103:                    std::function<void()> task;
+        -:  104:                    {
+    #####:  105:                        std::unique_lock<std::mutex> lock(this->mutex); //Ensures that access to shared data is thread-safe.
+        -:  106:                        /**
+        -:  107:                         * This line causes the thread to wait until either:
+        -:  108:                         * stop is true (indicating that the pool should shut down).
+        -:  109:                         * The task queue (tasks) is not empty (indicating that there is a task to process).
+        -:  110:                        */
+    #####:  111:                        this->condition.wait(lock, [this] { return this->stop || !this->tasks.empty(); });
+    #####:  112:                        if (this->stop && this->tasks.empty()) return;
+    #####:  113:                        task = std::move(this->tasks.front());
+    #####:  114:                        this->tasks.pop(); //The task is removed from the queue.
+    #####:  115:                    }
+    #####:  116:                    task();
+    #####:  117:                } });
+        -:  118:        }
+    #####:  119:    }
+        -:  120:    // stops the threads and waits for them to join, ensuring clean shutdown
+    #####:  121:    ~LeaderFollowerPool()
+        -:  122:    {
+        -:  123:        {
+    #####:  124:            std::unique_lock<std::mutex> lock(mutex);
+    #####:  125:            stop = true;
+    #####:  126:        }
+    #####:  127:        condition.notify_all();
+    #####:  128:        for (std::thread &worker : threads)
+        -:  129:        {
+    #####:  130:            worker.join();
+        -:  131:        }
+    #####:  132:    }
+        -:  133:    // Adds a new task to the queue.
+        -:  134:    template <class F>
+    #####:  135:    void enqueue(F &&f)
+        -:  136:    {
+        -:  137:        {
+    #####:  138:            std::unique_lock<std::mutex> lock(mutex);
+    #####:  139:            tasks.emplace(std::forward<F>(f));
+    #####:  140:        }
+    #####:  141:        condition.notify_one();
+    #####:  142:    }
+        -:  143:};
+        -:  144:
+        -:  145:#endif

@@ -1,0 +1,46 @@
+        -:    0:Source:Graph_DIR/MSTFactory.cpp
+        -:    1:#include "Graph_Builder.cpp"
+        -:    2:#include "MST.cpp"
+        -:    3:#include "MSTAlgorithm.cpp"
+        -:    4:
+        -:    5:/**
+        -:    6: * @brief The MSTFactory class is responsible for creating instances of 
+        -:    7: * different Minimum Spanning Tree (MST) algorithms. It uses the Factory 
+        -:    8: * design pattern to provide abstractions over various algorithm implementations.
+        -:    9: */
+        -:   10:class MSTFactory
+        -:   11:{
+        -:   12:public:
+        -:   13:    enum class Algorithm
+        -:   14:    {
+        -:   15:        BORUVKA,
+        -:   16:        PRIM,
+        -:   17:        KRUSKAL,
+        -:   18:        TARJAN,
+        -:   19:    };
+        -:   20:
+        -:   21:    /**
+        -:   22:     * Creates an instance of a specified MST algorithm.
+        -:   23:     * 
+        -:   24:     * @param algo The algorithm type selected from the Algorithm enumeration.
+        -:   25:     * @return A unique pointer to an MSTAlgorithm object of the specified type.
+        -:   26:     * @throws std::runtime_error if an unknown algorithm type is requested.
+        -:   27:     */
+        -:   28:
+    #####:   29:    static std::unique_ptr<MSTAlgorithm> createAlgorithm(Algorithm algo)
+        -:   30:    {
+    #####:   31:        switch (algo)
+        -:   32:        {
+    #####:   33:        case Algorithm::BORUVKA:
+    #####:   34:            return std::make_unique<BoruvkaAlgorithm>();
+    #####:   35:        case Algorithm::PRIM:
+    #####:   36:            return std::make_unique<PrimAlgorithm>();
+    #####:   37:        case Algorithm::KRUSKAL:
+    #####:   38:            return std::make_unique<KruskalAlgorithm>();
+    #####:   39:        case Algorithm::TARJAN:
+    #####:   40:            return std::make_unique<TarjanAlgorithm>();
+    #####:   41:        default:
+    #####:   42:            throw std::runtime_error("Unknown algorithm");
+        -:   43:        }
+        -:   44:    }
+        -:   45:};

@@ -1,0 +1,136 @@
+        -:    0:Source:Graph_DIR/Graph_Builder.cpp
+        -:    1:#include <vector>
+        -:    2:#include <algorithm>
+        -:    3:
+        -:    4:#ifndef GRAPH_BULDER_CPP
+        -:    5:#define GRAPH_BULDER_CPP
+        -:    6:
+        -:    7:/**
+        -:    8: * The Graph class represents an undirected graph using adjacency lists.
+        -:    9: * It provides functionality to add and remove edges, and to clear the graph.
+        -:   10: */
+        -:   11:
+        -:   12:class Graph
+        -:   13:{
+        -:   14:public:
+        -:   15:   /**
+        -:   16:     * A structure to represent an edge in the graph.
+        -:   17:     */
+        -:   18:    struct Edge
+        -:   19:    {
+        -:   20:        int from;   ///< Starting vertex of the edge
+        -:   21:        int to;     ///< Ending vertex of the edge
+        -:   22:        int weight; ///< Weight of the edge
+    #####:   23:        Edge(int f, int t, int w) : from(f), to(t), weight(w) {} //Constructor for the Edge struct.
+        -:   24:    };
+        -:   25:    /**
+        -:   26:     * Constructs a Graph with a specified number of vertices.
+        -:   27:     * @param vertices Number of vertices in the graph.
+        -:   28:     */
+    #####:   29:    Graph(int vertices) : V(vertices)
+        -:   30:    {
+    #####:   31:        adjacencyList.resize(V);
+    #####:   32:    }
+        -:   33:    /**
+        -:   34:     * Default constructor for the Graph class.
+        -:   35:     * Initializes an empty graph with no vertices.
+        -:   36:    */
+    #####:   37:    Graph() {};
+        -:   38:
+        -:   39:    /**
+        -:   40:     * Adds an edge to the graph. Since the graph is undirected,
+        -:   41:     * the edge is added in both directions.
+        -:   42:     * 
+        -:   43:     * @param from Starting vertex
+        -:   44:     * @param to Ending vertex
+        -:   45:     * @param weight Weight of the edge
+        -:   46:     */
+        -:   47:
+    #####:   48:    void addEdge(int from, int to, int weight)
+        -:   49:    {
+    #####:   50:        adjacencyList[from].emplace_back(from, to, weight);
+    #####:   51:        adjacencyList[to].emplace_back(to, from, weight); // For undirected graph
+    #####:   52:        this->edgecount++;
+    #####:   53:    }
+        -:   54:
+        -:   55:
+        -:   56:    /**
+        -:   57:     * Gets the edge between two vertices, if it exists.
+        -:   58:     * @param from Starting vertex
+        -:   59:     * @param to Ending vertex
+        -:   60:     * @return The edge between the specified vertices, or a default-constructed Edge if the edge does not exist.
+        -:   61:     */
+        -:   62:    Graph::Edge getEdge(int from, int to) const {
+        -:   63:        for (const auto& edge : adjacencyList[from]) {
+        -:   64:            if (edge.to == to) {
+        -:   65:                return edge;
+        -:   66:            }
+        -:   67:        }
+        -:   68:        return {-1, -1, 0};
+        -:   69:    }
+        -:   70:
+        -:   71:    /**
+        -:   72:     * Removes an edge from the graph, erases it from both vertices.
+        -:   73:     * 
+        -:   74:     * @param from Starting vertex
+        -:   75:     * @param to Ending vertex
+        -:   76:     * @param weight Weight of the edge to be removed
+        -:   77:     * @note Dissconnecting a vertex will cause a weight of -inf around it.
+        -:   78:     */
+    #####:   79:    void removeEdge(int from, int to, int weight)
+        -:   80:    {
+        -:   81:        // Find the edge to remove in the adjacency list of 'from'
+    #####:   82:        auto it = std::find_if(adjacencyList[from].begin(), adjacencyList[from].end(),
+    #####:   83:                               [&](const Edge &e)
+    #####:   84:                               { return e.to == to && e.weight == weight; });
+    #####:   85:        if (it != adjacencyList[from].end())
+        -:   86:        {
+    #####:   87:            adjacencyList[from].erase(it);
+        -:   88:        }
+        -:   89:
+        -:   90:        // Find the edge to remove in the adjacency list of 'to'
+    #####:   91:        it = std::find_if(adjacencyList[to].begin(), adjacencyList[to].end(),
+    #####:   92:                          [&](const Edge &e)
+    #####:   93:                          { return e.to == from && e.weight == weight; });
+    #####:   94:        if (it != adjacencyList[to].end())
+        -:   95:        {
+    #####:   96:            adjacencyList[to].erase(it);
+        -:   97:        }
+        -:   98:
+    #####:   99:        this->edgecount--;
+    #####:  100:    }
+        -:  101:
+        -:  102:    /**
+        -:  103:     * Clears the graph, removing all edges.
+        -:  104:     */
+    #####:  105:    void clearGraph()
+        -:  106:    {
+    #####:  107:        for (auto &edges : adjacencyList)
+        -:  108:        {
+    #####:  109:            edges.clear();
+        -:  110:        }
+    #####:  111:        edgecount = 0;
+    #####:  112:    }
+        -:  113:    /**
+        -:  114:     * Gets the number of vertices in the graph.
+        -:  115:     * @return The number of vertices.
+        -:  116:     */
+    #####:  117:    int getVerticesCount() const { return V; }
+        -:  118:    /**
+        -:  119:     * Gets the number of edges in the graph.
+        -:  120:     * @return The number of edges.
+        -:  121:     */
+        -:  122:    int getEdgesCount() const { return edgecount; }
+        -:  123:    /**
+        -:  124:     * Gets the adjacency list representing the graph.
+        -:  125:     * @return A reference to the adjacency list.
+        -:  126:     */
+    #####:  127:    const std::vector<std::vector<Edge>> &getAdjacencyList() const { return adjacencyList; }
+        -:  128:
+        -:  129:private:
+        -:  130:    int V; // Number of vertices
+        -:  131:    std::vector<std::vector<Edge>> adjacencyList; //Adjacency list for storing edges
+        -:  132:    int edgecount = 0; ///< Count of the total number of edges in the graph
+        -:  133:};
+        -:  134:
+        -:  135:#endif

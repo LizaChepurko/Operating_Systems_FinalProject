@@ -1,0 +1,125 @@
+        -:    0:Source:pollclient.cpp
+        -:    0:Graph:pollclient.gcno
+        -:    0:Data:-
+        -:    0:Runs:0
+        -:    1:/*
+        -:    2:** client.c -- a stream socket client demo
+        -:    3:*/
+        -:    4:
+        -:    5:#include <stdio.h>
+        -:    6:#include <iostream>
+        -:    7:#include <poll.h>
+        -:    8:#include <stdlib.h>
+        -:    9:#include <unistd.h>
+        -:   10:#include <errno.h>
+        -:   11:#include <string.h>
+        -:   12:#include <netdb.h>
+        -:   13:#include <sys/types.h>
+        -:   14:#include <netinet/in.h>
+        -:   15:#include <sys/socket.h>
+        -:   16:
+        -:   17:#include <arpa/inet.h>
+        -:   18:
+        -:   19:/**
+        -:   20: * Beej poll client
+        -:   21:*/
+        -:   22:
+        -:   23:#define PORT "8080" // the port client will be connecting to
+        -:   24:
+        -:   25:#define MAXDATASIZE 8192 // max number of bytes we can get at once
+        -:   26:
+        -:   27:// get sockaddr, IPv4 or IPv6:
+    #####:   28:void *get_in_addr(struct sockaddr *sa)
+        -:   29:{
+    #####:   30:	if (sa->sa_family == AF_INET)
+        -:   31:	{
+    #####:   32:		return &(((struct sockaddr_in *)sa)->sin_addr);
+        -:   33:	}
+        -:   34:
+    #####:   35:	return &(((struct sockaddr_in6 *)sa)->sin6_addr);
+        -:   36:}
+        -:   37:
+    #####:   38:int main(int argc, char *argv[])
+        -:   39:{
+        -:   40:	int sockfd, numbytes;
+        -:   41:	char buf[MAXDATASIZE];
+        -:   42:	struct addrinfo hints, *servinfo, *p;
+        -:   43:	int rv;
+        -:   44:	char s[INET6_ADDRSTRLEN];
+        -:   45:
+    #####:   46:	if (argc != 2)
+        -:   47:	{
+    #####:   48:		fprintf(stderr, "usage: client hostname\n");
+    #####:   49:		exit(1);
+        -:   50:	}
+        -:   51:
+    #####:   52:	memset(&hints, 0, sizeof(hints));
+    #####:   53:	hints.ai_family = AF_UNSPEC;
+    #####:   54:	hints.ai_socktype = SOCK_STREAM;
+        -:   55:
+    #####:   56:	if ((rv = getaddrinfo(argv[1], PORT, &hints, &servinfo)) != 0)
+        -:   57:	{
+    #####:   58:		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+    #####:   59:		return 1;
+        -:   60:	}
+        -:   61:
+        -:   62:	// loop through all the results and connect to the first we can
+    #####:   63:	for (p = servinfo; p != NULL; p = p->ai_next)
+        -:   64:	{
+    #####:   65:		if ((sockfd = socket(p->ai_family, p->ai_socktype,
+    #####:   66:							 p->ai_protocol)) == -1)
+        -:   67:		{
+    #####:   68:			perror("client: socket");
+    #####:   69:			continue;
+        -:   70:		}
+        -:   71:
+    #####:   72:		if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1)
+        -:   73:		{
+    #####:   74:			perror("client: connect");
+    #####:   75:			close(sockfd);
+    #####:   76:			continue;
+        -:   77:		}
+        -:   78:
+    #####:   79:		break;
+        -:   80:	}
+        -:   81:
+    #####:   82:	if (p == NULL)
+        -:   83:	{
+    #####:   84:		fprintf(stderr, "client: failed to connect\n");
+    #####:   85:		return 2;
+        -:   86:	}
+        -:   87:
+    #####:   88:	inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr),
+        -:   89:			  s, sizeof(s));
+    #####:   90:	printf("client: connecting to %s\n", s);
+        -:   91:
+    #####:   92:	freeaddrinfo(servinfo); // all done with this structure
+        -:   93:	struct pollfd pfds[2];
+    #####:   94:	pfds[0].fd = 0; // Stdin
+    #####:   95:	pfds[0].events = POLLIN;
+    #####:   96:	pfds[1].fd = sockfd;
+    #####:   97:	pfds[1].events = POLLIN;
+        -:   98:	for (;;)
+        -:   99:	{
+    #####:  100:		poll(pfds, 2, -1);
+    #####:  101:		if (pfds[0].revents & POLLIN)
+        -:  102:		{
+    #####:  103:			numbytes = read(0, buf, MAXDATASIZE - 1);
+        -:  104:			// Exit loop if user types "exit"
+    #####:  105:			if (!strcmp(buf,"exit"))
+        -:  106:			{
+    #####:  107:				break;
+        -:  108:			}
+    #####:  109:			send(sockfd, buf, numbytes, 0);
+        -:  110:		}
+        -:  111:		else
+        -:  112:		{
+    #####:  113:			numbytes = recv(sockfd, buf, MAXDATASIZE - 1, 0);
+    #####:  114:			buf[numbytes] = 0;
+    #####:  115:			printf("%s", buf);
+        -:  116:		}
+        -:  117:	}
+    #####:  118:	close(sockfd);
+        -:  119:
+    #####:  120:	return 0; 
+        -:  121:}

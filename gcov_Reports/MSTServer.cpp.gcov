@@ -1,0 +1,333 @@
+        -:    0:Source:Server_DIR/MSTServer.cpp
+        -:    1:#include <sstream>
+        -:    2:#include <sys/socket.h>
+        -:    3:#include <netinet/in.h>
+        -:    4:#include <unistd.h>
+        -:    5:#include <cstring>
+        -:    6:#include <fcntl.h>
+        -:    7:#include <sys/wait.h>
+        -:    8:
+        -:    9:#include "Patterns.cpp"
+        -:   10:
+        -:   11:#define PORT 8080
+        -:   12:#define MAX_CLIENTS 30
+        -:   13:#define BUFFER_SIZE 8192
+        -:   14:
+        -:   15:/**
+        -:   16: * @brief The MSTServer class handles client requests to perform
+        -:   17: * operations on a graph, such as adding or removing edges, and
+        -:   18: * solving the Minimum Spanning Tree (MST) problem using a separate process.
+        -:   19: * Plus pipes for communication with the Graph process
+        -:   20: */
+        -:   21:
+        -:   22:class MSTServer
+        -:   23:{
+        -:   24:private:
+        -:   25:    int graphCommandPipeFd[2]; // Pipe for sending commands to the Graph process
+        -:   26:    int graphResultPipeFd[2];  // Pipe for receiving results from the Graph process
+        -:   27:    pid_t graphPid;
+        -:   28:    ActiveObject pipelineExecutor;
+        -:   29:    LeaderFollowerPool lfPool;
+        -:   30:
+        -:   31:    /**
+        -:   32:     * @brief Starts the Graph process, setting up pipes for inter-process communication.
+        -:   33:     *        This process handles graph-related operations like addition/removal of edges
+        -:   34:     *        and solving the MST.
+        -:   35:     */
+    #####:   36:    void startGraphProcess()
+        -:   37:    {
+        -:   38:        // Create command pipe
+    #####:   39:        if (pipe(graphCommandPipeFd) == -1)
+        -:   40:        {
+    #####:   41:            perror("pipe (command)");
+    #####:   42:            exit(EXIT_FAILURE);
+        -:   43:        }
+        -:   44:
+        -:   45:        // Create result pipe
+    #####:   46:        if (pipe(graphResultPipeFd) == -1)
+        -:   47:        {
+    #####:   48:            perror("pipe (result)");
+    #####:   49:            exit(EXIT_FAILURE);
+        -:   50:        }
+        -:   51:
+    #####:   52:        graphPid = fork();
+    #####:   53:        if (graphPid == -1)
+        -:   54:        {
+    #####:   55:            perror("fork");
+    #####:   56:            exit(EXIT_FAILURE);
+        -:   57:        }
+        -:   58:        // Child process
+    #####:   59:        else if (graphPid == 0)
+        -:   60:        {
+        -:   61:            // Close unused ends of the pipes
+    #####:   62:            close(graphCommandPipeFd[1]);
+    #####:   63:            close(graphResultPipeFd[0]);
+        -:   64:
+        -:   65:            // Redirect stdin and stdout to the pipes
+    #####:   66:            dup2(graphCommandPipeFd[0], STDIN_FILENO);
+    #####:   67:            dup2(graphResultPipeFd[1], STDOUT_FILENO);
+    #####:   68:            dup2(graphResultPipeFd[1], STDERR_FILENO);
+        -:   69:
+        -:   70:            // Close the read and write end of the command pipe
+    #####:   71:            close(graphCommandPipeFd[0]);
+    #####:   72:            close(graphResultPipeFd[1]);
+        -:   73:            // Execute the Graph process
+    #####:   74:            execl("./Graph", "Graph", nullptr);
+    #####:   75:            perror("execl");
+    #####:   76:            exit(EXIT_FAILURE);
+        -:   77:        }
+        -:   78:        // Parent process
+        -:   79:        else
+        -:   80:        {
+        -:   81:            // Close unused ends of the pipes
+    #####:   82:            close(graphCommandPipeFd[0]);
+    #####:   83:            close(graphResultPipeFd[1]);
+        -:   84:        }
+    #####:   85:    }
+        -:   86:
+        -:   87:public:
+        -:   88:    /**
+        -:   89:     * Constructs an MSTServer with a specified number of threads
+        -:   90:     * for handling client requests and graph operations.
+        -:   91:     *
+        -:   92:     * @param numThreads Number of threads in the leader-follower pool.
+        -:   93:     */
+    #####:   94:    MSTServer(size_t numThreads) : lfPool(numThreads)
+        -:   95:    {
+    #####:   96:        startGraphProcess();
+    #####:   97:    }
+        -:   98:    /**
+        -:   99:     * Handles incoming client connections and processes their requests.
+        -:  100:     *
+        -:  101:     * @param clientSocket Socket descriptor for the connected client.
+        -:  102:     */
+    #####:  103:    void handleClient(int clientSocket)
+        -:  104:    {
+    #####:  105:        char buffer[BUFFER_SIZE] = {0};
+        -:  106:        while (true)
+        -:  107:        {
+    #####:  108:            memset(buffer, 0, BUFFER_SIZE);
+    #####:  109:            int valread = read(clientSocket, buffer, BUFFER_SIZE);
+    #####:  110:            if (valread <= 0)
+    #####:  111:                break;
+        -:  112:
+    #####:  113:            std::string request(buffer);
+    #####:  114:            std::cout << "Server: Received request from client: " << request << std::endl;
+    #####:  115:            std::istringstream iss(request);
+    #####:  116:            std::string command;
+    #####:  117:            iss >> command;
+        -:  118:
+    #####:  119:            if (command == "ADD_GRAPH")
+        -:  120:            {
+    #####:  121:                std::string result = executeCommand(request);
+    #####:  122:                if (result.empty() || result == "No response from Graph process")
+        -:  123:                {
+    #####:  124:                    result = "Graph added successfully\n";
+        -:  125:                }
+    #####:  126:                std::cout << "Sending to client: " << result << std::endl;
+    #####:  127:                send(clientSocket, result.c_str(), result.length(), 0);
+    #####:  128:            }
+    #####:  129:            else if (command == "ADD_EDGE")
+        -:  130:            {
+    #####:  131:                std::string result = executeCommand(request);
+    #####:  132:                if (result.empty() || result == "No response from Graph process")
+        -:  133:                {
+    #####:  134:                    result = "Edge added successfully\n";
+        -:  135:                }
+    #####:  136:                std::cout << "Sending to client: " << result << std::endl;
+    #####:  137:                send(clientSocket, result.c_str(), result.length(), 0);
+    #####:  138:            }
+    #####:  139:            else if (command == "REMOVE_EDGE")
+        -:  140:            {
+    #####:  141:                std::string result = executeCommand(request);
+    #####:  142:                if (result.empty() || result == "No response from Graph process")
+        -:  143:                {
+    #####:  144:                    result = "Edge removed successfully\n";
+        -:  145:                }
+    #####:  146:                std::cout << "Sending to client: " << result << std::endl;
+    #####:  147:                send(clientSocket, result.c_str(), result.length(), 0);
+    #####:  148:            }
+    #####:  149:            else if (command == "REMOVE_GRAPH")
+        -:  150:            {
+    #####:  151:                std::string result = executeCommand(request);
+    #####:  152:                if (result.empty() || result == "No response from Graph process")
+        -:  153:                {
+    #####:  154:                    result = "Graph removed successfully\n";
+        -:  155:                }
+    #####:  156:                std::cout << "Sending to client: " << result << std::endl;
+    #####:  157:                send(clientSocket, result.c_str(), result.length(), 0);
+    #####:  158:            }
+    #####:  159:            else if (command == "SOLVE_MST_PIPELINE")
+        -:  160:            {
+    #####:  161:                std::cout << "Server: Queuing task for Pipeline..." << std::endl;
+    #####:  162:                std::string solveCommand = "SOLVE_MST" + request.substr(command.length());
+    #####:  163:                auto task = [this, clientSocket, solveCommand]()
+        -:  164:                {
+    #####:  165:                    std::string result = executeCommand(solveCommand);
+    #####:  166:                    if (result.empty() || result == "No response from Graph process")
+        -:  167:                    {
+    #####:  168:                        result = "Error: No response from Graph process\n";
+        -:  169:                    }
+    #####:  170:                    std::cout << "Pipeline Worker: Sending to client: " << result << std::endl;
+        -:  171:
+        -:  172:                    // Read all results from the 'result' string
+    #####:  173:                    std::istringstream iss(result);
+    #####:  174:                    std::string line;
+        -:  175:
+    #####:  176:                    std::getline(iss, line); // Skip the "Graph X MST Results:" line
+    #####:  177:                    std::getline(iss, line); // Get Total Weight
+    #####:  178:                    std::getline(iss, line); // Get Longest Distance
+    #####:  179:                    std::getline(iss, line); // Get Average Distance
+    #####:  180:                    std::getline(iss, line); // Get Shortest Distance
+        -:  181:
+        -:  182:                    // Send the entire result string to the client
+    #####:  183:                    send(clientSocket, result.c_str(), result.length(), 0);
+    #####:  184:                };
+    #####:  185:                pipelineExecutor.enqueue(task);
+    #####:  186:            }
+    #####:  187:            else if (command == "SOLVE_MST_LF")
+        -:  188:            {
+    #####:  189:                std::cout << "Server: Queuing task for Leader-Follower..." << std::endl;
+    #####:  190:                std::string solveCommand = "SOLVE_MST" + request.substr(command.length());
+    #####:  191:                auto task = [this, clientSocket, solveCommand]()
+        -:  192:                {
+    #####:  193:                    std::string result = executeCommand(solveCommand);
+    #####:  194:                    if (result.empty() || result == "No response from Graph process")
+        -:  195:                    {
+    #####:  196:                        result = "Error: No response from Graph process\n";
+        -:  197:                    }
+    #####:  198:                    std::cout << "Leader-Follower Thread: Sending to client: " << result << std::endl;
+        -:  199:
+        -:  200:                    // Read all results from the 'result' string
+    #####:  201:                    std::istringstream iss(result);
+    #####:  202:                    std::string line;
+        -:  203:
+    #####:  204:                    std::getline(iss, line); // Skip the "Graph X MST Results:" line
+    #####:  205:                    std::getline(iss, line); // Get Total Weight
+    #####:  206:                    std::getline(iss, line); // Get Longest Distance
+    #####:  207:                    std::getline(iss, line); // Get Average Distance
+    #####:  208:                    std::getline(iss, line); // Get Shortest Distance
+        -:  209:
+        -:  210:                    // Send the entire result string to the client
+    #####:  211:                    send(clientSocket, result.c_str(), result.length(), 0);
+    #####:  212:                };
+    #####:  213:                lfPool.enqueue(task);
+    #####:  214:            }
+        -:  215:            else
+        -:  216:            {
+    #####:  217:                std::string errorMsg = "Unknown command\n";
+    #####:  218:                std::cout << "Sending to client: " << errorMsg << std::endl;
+    #####:  219:                send(clientSocket, errorMsg.c_str(), errorMsg.length(), 0);
+    #####:  220:            }
+    #####:  221:        }
+    #####:  222:        close(clientSocket);
+    #####:  223:    }
+        -:  224:
+        -:  225:    /**
+        -:  226:     * Executes a command by sending it to the Graph process
+        -:  227:     * and receiving the response from it.
+        -:  228:     *
+        -:  229:     * @param command The command string to be processed by the Graph process.
+        -:  230:     * @return The response received from the Graph process.
+        -:  231:     */
+    #####:  232:    std::string executeCommand(const std::string &command)
+        -:  233:    {
+    #####:  234:        std::cout << "Executing command: " << command << std::endl;
+        -:  235:        // Write command to the command pipe
+    #####:  236:        write(graphCommandPipeFd[1], (command + "\n").c_str(), command.length() + 1);
+        -:  237:
+        -:  238:        // Read response from the result pipe
+        -:  239:        char buffer[BUFFER_SIZE];
+    #####:  240:        std::string result;
+        -:  241:        ssize_t bytesRead;
+        -:  242:
+        -:  243:        while (true)
+        -:  244:        {
+    #####:  245:            bytesRead = read(graphResultPipeFd[0], buffer, BUFFER_SIZE - 1);
+    #####:  246:            if (bytesRead > 0)
+        -:  247:            {
+    #####:  248:                buffer[bytesRead] = '\0';
+    #####:  249:                result += buffer;
+        -:  250:
+    #####:  251:                if (result.find("\n") != std::string::npos)
+        -:  252:                {
+    #####:  253:                    break;
+        -:  254:                }
+        -:  255:            }
+    #####:  256:            else if (bytesRead == 0)
+        -:  257:            {
+    #####:  258:                break; // Reached EOF
+        -:  259:            }
+        -:  260:            else
+        -:  261:            {
+    #####:  262:                perror("read error (result pipe)");
+    #####:  263:                break;
+        -:  264:            }
+        -:  265:        }
+        -:  266:
+    #####:  267:        std::cout << "Received result from Graph process" << result << std::endl;
+    #####:  268:        return result;
+    =====:  269:    }
+        -:  270:
+        -:  271:    /**
+        -:  272:     * Starts accepting client connections and handles them concurrently.
+        -:  273:     */
+    #####:  274:    void run()
+        -:  275:    {
+        -:  276:        int server_fd, new_socket;
+        -:  277:        struct sockaddr_in address;
+    #####:  278:        int opt = 1;
+    #####:  279:        int addrlen = sizeof(address);
+        -:  280:
+    #####:  281:        if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
+        -:  282:        {
+    #####:  283:            perror("socket failed");
+    #####:  284:            exit(EXIT_FAILURE);
+        -:  285:        }
+        -:  286:
+    #####:  287:        if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)))
+        -:  288:        {
+    #####:  289:            perror("setsockopt");
+    #####:  290:            exit(EXIT_FAILURE);
+        -:  291:        }
+        -:  292:
+    #####:  293:        address.sin_family = AF_INET;
+    #####:  294:        address.sin_addr.s_addr = INADDR_ANY;
+    #####:  295:        address.sin_port = htons(PORT);
+        -:  296:
+    #####:  297:        if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0)
+        -:  298:        {
+    #####:  299:            perror("bind failed");
+    #####:  300:            exit(EXIT_FAILURE);
+        -:  301:        }
+        -:  302:
+    #####:  303:        if (listen(server_fd, 3) < 0)
+        -:  304:        {
+    #####:  305:            perror("listen");
+    #####:  306:            exit(EXIT_FAILURE);
+        -:  307:        }
+        -:  308:
+    #####:  309:        std::cout << "Server is running on port " << PORT << std::endl;
+        -:  310:
+        -:  311:        while (true)
+        -:  312:        {
+    #####:  313:            if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen)) < 0)
+        -:  314:            {
+    #####:  315:                perror("accept");
+    #####:  316:                continue;
+        -:  317:            }
+        -:  318:            // Handle each client connection in a separate thread
+    #####:  319:            std::thread clientThread(&MSTServer::handleClient, this, new_socket);
+    #####:  320:            clientThread.detach();
+    #####:  321:        }
+        -:  322:    }
+        -:  323:    /**
+        -:  324:     * Destructor to clean up resources and terminate the Graph process.
+        -:  325:     */
+    #####:  326:    ~MSTServer()
+        -:  327:    {
+    #####:  328:        close(graphCommandPipeFd[1]);
+    #####:  329:        close(graphResultPipeFd[0]);
+    #####:  330:        waitpid(graphPid, nullptr, 0);
+    #####:  331:    }
+        -:  332:};
